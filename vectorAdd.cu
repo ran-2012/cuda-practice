@@ -36,6 +36,25 @@ int main()
 
 	//计时器
 	Timer t;
+	
+	int device;
+	cudaDeviceProp prop;
+	cudaGetDevice(&device);
+	cudaGetDeviceProperties(&prop, device);
+	std::cout << "Device name: " << prop.name << std::endl;
+	std::cout << "Device memory: " << prop.totalGlobalMem / 1024 / 1024 << "MB" << std::endl;
+	std::cout << "Memory Frequency: " << prop.memoryClockRate / 1000 << "MHz" << std::endl;
+	std::cout << "MultiProcessor: " << prop.multiProcessorCount << std::endl;
+	std::cout << "Clock rate: " << prop.clockRate / 1000 << "MHz" << std::endl;
+	std::cout << "Max threads pre multiprocessor: " << prop.maxThreadsPerMultiProcessor << std::endl;
+	std::cout << "Max blocks: x: " << prop.maxGridSize[0] 
+		<< " y: "<<prop.maxGridSize[1] 
+		<< " z: " << prop.maxGridSize[2] << std::endl;
+	std::cout << "Max threads per block: " <<  prop.maxThreadsPerBlock << std::endl;
+	std::cout << "Max threads in each dims: x: " << prop.maxThreadsDim[0]
+		<< " y: " << prop.maxThreadsDim[1]
+		<< " z: " << prop.maxThreadsDim[2] << std::endl;
+	std::cout << "Warp size:" << prop.warpSize << std::endl;
 
 	try
 	{
@@ -113,7 +132,8 @@ int main()
 	{
 		std::cerr << e.what() << std::endl;
 	}
-
+	
+	std::cout << "按任意键退出" << std::endl;
 	getchar();
 
 	return 0;
