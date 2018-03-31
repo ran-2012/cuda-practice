@@ -1,4 +1,4 @@
-
+ï»¿
 //Some useful functions
 //Author: Ran
 //Time  : 2018/3/31
@@ -10,7 +10,7 @@
 #include <iostream>
 #include <cuda_runtime.h>
 
-//´íÎó´¦Àí
+//é”™è¯¯å¤„ç†
 void errProc(cudaError_t err, std::string errStr = "")
 {
 	if (err != cudaSuccess)
@@ -19,7 +19,7 @@ void errProc(cudaError_t err, std::string errStr = "")
 	}
 }
 
-//Éú³ÉËæ»úÊı
+//ç”Ÿæˆéšæœºæ•°
 template<typename randtype = float> randtype rand()
 {
 	std::uniform_real_distribution<randtype> uni(0, 10000);
