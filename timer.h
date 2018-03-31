@@ -1,7 +1,7 @@
 
 //Simple timer
-//Auher£ºRanto
-//Timer£º2017/5
+//Auher: Ranto
+//Time : 2017/5
 
 #pragma once
 
