@@ -26,24 +26,24 @@ template<typename randtype = float> randtype rand()
 	return uni(std::random_device());
 };
 
-void displayInfo(std::ostream &is = std::cout)
+void displayInfo(std::ostream &os = std::cout)
 {
 	int device;
 	cudaDeviceProp prop;
 	cudaGetDevice(&device);
 	cudaGetDeviceProperties(&prop, device);
-	is << "Device name: " << prop.name << std::endl;
-	is << "Device memory: " << prop.totalGlobalMem / 1024 / 1024 << "MB" << std::endl;
-	is << "Memory Frequency: " << prop.memoryClockRate / 1000 << "MHz" << std::endl;
-	is << "MultiProcessor: " << prop.multiProcessorCount << std::endl;
-	is << "Clock rate: " << prop.clockRate / 1000 << "MHz" << std::endl;
-	is << "Max threads pre multiprocessor: " << prop.maxThreadsPerMultiProcessor << std::endl;
-	is << "Max blocks: x: " << prop.maxGridSize[0]
+	os << "Device name: " << prop.name << std::endl;
+	os << "Device memory: " << prop.totalGlobalMem / 1024 / 1024 << "MB" << std::endl;
+	os << "Memory Frequency: " << prop.memoryClockRate / 1000 << "MHz" << std::endl;
+	os << "MultiProcessor: " << prop.multiProcessorCount << std::endl;
+	os << "Clock rate: " << prop.clockRate / 1000 << "MHz" << std::endl;
+	os << "Max threads pre multiprocessor: " << prop.maxThreadsPerMultiProcessor << std::endl;
+	os << "Max blocks: x: " << prop.maxGridSize[0]
 		<< " y: " << prop.maxGridSize[1]
 		<< " z: " << prop.maxGridSize[2] << std::endl;
-	is << "Max threads per block: " << prop.maxThreadsPerBlock << std::endl;
-	is << "Max threads in each dims: x: " << prop.maxThreadsDim[0]
+	os << "Max threads per block: " << prop.maxThreadsPerBlock << std::endl;
+	os << "Max threads in each dims: x: " << prop.maxThreadsDim[0]
 		<< " y: " << prop.maxThreadsDim[1]
 		<< " z: " << prop.maxThreadsDim[2] << std::endl;
-	is << "Warp size:" << prop.warpSize << std::endl;
+	os << "Warp size:" << prop.warpSize << std::endl;
 }
