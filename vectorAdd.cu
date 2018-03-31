@@ -11,21 +11,13 @@
 #include <cuda_runtime.h>
 
 #include "timer.h"
+#include "ran_helper_functions.h"
 
 //kernel函数
 __global__ void vectorAdd(float *a, float *b, float *c, int num)
 {
 	int i = blockDim.x * blockIdx.x + threadIdx.x;
 	c[i] = a[i] + a[i];
-}
-
-//错误处理
-void errProc(cudaError_t err, std::string errStr = "")
-{
-	if (err != cudaSuccess)
-	{
-		throw std::exception((errStr + cudaGetErrorString(err)).c_str());
-	}
 }
 
 int main()
@@ -37,24 +29,7 @@ int main()
 	//计时器
 	Timer t;
 	
-	int device;
-	cudaDeviceProp prop;
-	cudaGetDevice(&device);
-	cudaGetDeviceProperties(&prop, device);
-	std::cout << "Device name: " << prop.name << std::endl;
-	std::cout << "Device memory: " << prop.totalGlobalMem / 1024 / 1024 << "MB" << std::endl;
-	std::cout << "Memory Frequency: " << prop.memoryClockRate / 1000 << "MHz" << std::endl;
-	std::cout << "MultiProcessor: " << prop.multiProcessorCount << std::endl;
-	std::cout << "Clock rate: " << prop.clockRate / 1000 << "MHz" << std::endl;
-	std::cout << "Max threads pre multiprocessor: " << prop.maxThreadsPerMultiProcessor << std::endl;
-	std::cout << "Max blocks: x: " << prop.maxGridSize[0] 
-		<< " y: "<<prop.maxGridSize[1] 
-		<< " z: " << prop.maxGridSize[2] << std::endl;
-	std::cout << "Max threads per block: " <<  prop.maxThreadsPerBlock << std::endl;
-	std::cout << "Max threads in each dims: x: " << prop.maxThreadsDim[0]
-		<< " y: " << prop.maxThreadsDim[1]
-		<< " z: " << prop.maxThreadsDim[2] << std::endl;
-	std::cout << "Warp size:" << prop.warpSize << std::endl;
+	displayInfo();
 
 	try
 	{
@@ -68,12 +43,6 @@ int main()
 		float *gb = NULL;
 		float *gc = NULL;
 
-		//生成随机数
-		auto rand = []()
-		{
-			std::uniform_real_distribution<float> uni(0, 10000);
-			return uni(std::random_device());
-		};
 
 		//生成随机数据
 		for (int i = 0; i != num; ++i)
@@ -133,7 +102,7 @@ int main()
 		std::cerr << e.what() << std::endl;
 	}
 	
-	std::cout << "按任意键退出" << std::endl;
+	std::cout << "Press Enter to exit" << std::endl;
 	getchar();
 
 	return 0;
