@@ -1,7 +1,7 @@
 
 //Simple timer
-//Auher: Ranto
-//Time : 2017/5
+//Author: Ranto
+//Time  : 2017/5
 
 #pragma once
 
