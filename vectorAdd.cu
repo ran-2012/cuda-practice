@@ -17,6 +17,8 @@
 __global__ void vectorAdd(float *a, float *b, float *c, int num)
 {
 	int i = blockDim.x * blockIdx.x + threadIdx.x;
+	if (i >= num)
+		return;
 	c[i] = a[i] + a[i];
 }
 
@@ -68,7 +70,7 @@ int main()
 		const int threads = 1024;
 		//块数量
 		const int block = (num + threads - 1) / threads;
-		vectorAdd << <threads, block>> > (ga, gb, gc, num);
+		vectorAdd << <block, threads>> > (ga, gb, gc, num);
 		errProc(cudaGetLastError(), "无法启动");
 
 		//取结果
