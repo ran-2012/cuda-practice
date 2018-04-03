@@ -26,6 +26,7 @@ template<typename randtype = float> randtype rand()
 	return uni(std::random_device());
 };
 
+//显示一些常用信息
 void displayInfo(std::ostream &os = std::cout)
 {
 	int device;
