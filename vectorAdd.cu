@@ -10,12 +10,16 @@
 
 #include <cuda_runtime.h>
 
-#include "timer.h"
+#include "ran_timer.h"
 #include "ran_helper_functions.h"
 
 //kernel函数
 __global__ void vectorAdd(float *a, float *b, float *c, int num)
 {
+	//说明： 
+	//blockDim：每个block有多少个thread
+	//blockIdx：当前block编号
+	//threadIdx：当前thread编号
 	int i = blockDim.x * blockIdx.x + threadIdx.x;
 	if (i >= num)
 		return;
@@ -70,13 +74,14 @@ int main()
 		const int threads = 1024;
 		//块数量
 		const int block = (num + threads - 1) / threads;
+		//调用所需的block数、每个block中有多少thread
 		vectorAdd << <block, threads>> > (ga, gb, gc, num);
 		errProc(cudaGetLastError(), "无法启动");
 
 		//取结果
 		errProc(cudaMemcpy(rc, gc, size, cudaMemcpyDeviceToHost), "无法读取结果");
 		
-		//释放内存
+		//释放显存
 		cudaFree(ga), 
 		cudaFree(gb);
 		cudaFree(gc);
