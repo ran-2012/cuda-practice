@@ -16,7 +16,7 @@
 
 class Matrix;
 
-__global__ void matrixMul(Matrix a, Matrix b, Matrix c);
+__global__ void matrixMul(Matrix *a, Matrix *b, Matrix *c);
 
 class Matrix
 {
@@ -24,6 +24,8 @@ class Matrix
 	std::unique_ptr<float[]> hostData;
 	//矩阵在显存的数据
 	float *deviceData;
+	//矩阵在显存中的复制
+	Matrix *deviceMat;
 	//宽度，每行的数据数
 	size_t _width;
 	//高度，行数
@@ -38,6 +40,9 @@ class Matrix
 			"could not malloc memory deviceData in device");
 		errProc(cudaMemcpy(deviceData, hostData.get(), size() * sizeof(float), cudaMemcpyHostToDevice),
 			"could not copy memory from hostData to deviceData");
+		
+		errProc(cudaMalloc(&deviceMat, sizeof(Matrix)));
+		errProc(cudaMemcpy(deviceMat, this, sizeof(Matrix), cudaMemcpyHostToDevice));
 	}
 	void clearDeviceMem()
 	{
@@ -45,6 +50,11 @@ class Matrix
 		{
 			cudaFree(deviceData);
 			deviceData = nullptr;
+		}
+		if (deviceMat != nullptr)
+		{
+			cudaFree(deviceMat);
+			deviceMat = nullptr;
 		}
 	}
 	//结束CUDA计算
@@ -56,21 +66,21 @@ class Matrix
 public:
 
 	Matrix() :_width(1), _height(1), _size(1), 
-		deviceData(nullptr)
+		deviceData(nullptr), deviceMat(nullptr)
 	{
 		hostData = std::make_unique<float[]>(size());
 		zeroing();
 	}
 	//w为宽度，h为高度
 	Matrix(size_t w, size_t h) :_width(w), _height(h), _size(w*h), 
-		deviceData(nullptr)
+		deviceData(nullptr), deviceMat(nullptr)
 	{ 
 		hostData = std::make_unique<float[]>(size());
 		zeroing();
 	}
 	//
 	Matrix(Matrix& m) :_width(m.width()), _height(m.height()), _size(m.size()),
-		deviceData(nullptr)
+		deviceData(nullptr), deviceMat(nullptr)
 	{
 		hostData = std::make_unique<float[]>(size());
 		for (size_t i = 0; i != size(); ++i)
@@ -184,7 +194,7 @@ public:
 			ret.initCUDACompution();
 
 			//执行
-			matrixMul<<<height(), 32>>>(*this, m, ret);
+			matrixMul<<<height(), 32>>>(deviceMat, m.deviceMat, ret.deviceMat);
 			errProc(cudaGetLastError(), "fail to execute the kernel function in Matrix::operator*()");
 
 			//读结果
@@ -209,23 +219,23 @@ public:
 };
 //矩阵乘法：C=A*B
 //每个block计算C中的一行
-__global__ void matrixMul(Matrix a, Matrix b, Matrix c)
+__global__ void matrixMul(Matrix *a, Matrix *b, Matrix *c)
 {
 	int bid = blockIdx.x;
 	int tid = threadIdx.x;
 	int bdim = blockDim.x;
-	//tid偏移量，每次迭代增加thread的个数
+	//tid偏移量，每次循环增加thread的个数
 	int i = 0;
-	int w = c.widthDevice();
-	int ha = a.heightDevice();
+	int w = c->widthDevice();
+	int ha = a->heightDevice();
 	//如果数据量较少则跳过循环
 	if (w < bdim)
 	{
 		goto last;
 	}
-	//展开循环
+	//展开循环，每次循环计算矩阵c中第bid行的bdim个数
 #pragma unroll
-	for (; i != w; i+=bdim)
+	for (; i < w; i+=bdim)
 	{
 		//结果临时变量
 		float temp = 0;
@@ -233,9 +243,9 @@ __global__ void matrixMul(Matrix a, Matrix b, Matrix c)
 		int k = i + tid;
 		for (int j = 0; j != ha; ++j)
 		{
-			temp += a.accDevice(bid, j)*b.accDevice(j, k);
+			temp += a->accDevice(bid, j)*b->accDevice(j, k);
 		}
-		c.accDevice(bid, k) = temp;
+		c->accDevice(bid, k) = temp;
 	}
 last:
 	int k = i + tid;
@@ -245,9 +255,9 @@ last:
 		float temp = 0;
 		for (int j = 0; j != ha; ++j)
 		{
-			temp += a.accDevice(bid, j)*b.accDevice(j, k);
+			temp += a->accDevice(bid, j)*b->accDevice(j, k);
 		}
-		c.accDevice(bid, k) = temp;
+		c->accDevice(bid, k) = temp;
 	}
 
 }
@@ -274,14 +284,25 @@ Matrix multiplication(Matrix &a, Matrix &b)
 
 int main(int argc, char **argv)
 {
-	Matrix a(10, 10);
-	Matrix b(10, 10);
+	Timer t;
+
+	Matrix a(50, 50);
+	Matrix b(50, 50);
 	Matrix c_g, c_c;
 
 	a.randomize();
 	b.randomize();
+
+	t.begin();
 	c_g = a*b;
+	t.end();
+	std::cout << "GPU, time:" << t.time() << "ms" << std::endl;
+	t.reset();
+
+	t.begin();
 	c_c = multiplication(a, b);
+	t.end();
+	std::cout << "CPU, time:" << t.time() << "ms" << std::endl;
 
 	std::ofstream outa("a.txt");
 	std::ofstream outb("b.txt");
@@ -302,6 +323,10 @@ int main(int argc, char **argv)
 		outa << std::endl;
 		outb << std::endl;
 	}
-	system("pause");
+
+	char c;
+	std::cout << "Press Enter to exit." << std::flush;
+	std::cin >> c;
+
 	return 0;
 }
