@@ -7,6 +7,7 @@
 #include <memory>
 #include <iostream>
 #include <fstream>
+#include <vector>
 #include <cmath>
 
 #include <cuda_runtime.h>
@@ -64,6 +65,8 @@ class Matrix
 	}
 
 public:
+	//kernel运行参数
+	static int threads;
 
 	Matrix() :_width(1), _height(1), _size(1), 
 		deviceData(nullptr), deviceMat(nullptr)
@@ -74,7 +77,7 @@ public:
 	//w为宽度，h为高度
 	Matrix(size_t w, size_t h) :_width(w), _height(h), _size(w*h), 
 		deviceData(nullptr), deviceMat(nullptr)
-	{ 
+	{
 		hostData = std::make_unique<float[]>(size());
 		zeroing();
 	}
@@ -145,6 +148,7 @@ public:
 		_height = m.height();
 		_width = m.width();
 		_size = m.size();
+		threads = m.threads;
 
 		hostData = std::make_unique<float[]>(size());
 		for (size_t i = 0; i != size(); ++i)
@@ -159,6 +163,7 @@ public:
 		_height = m.height();
 		_width = m.width();
 		_size = m.size();
+		threads = m.threads;
 
 		hostData = std::move(m.hostData);
 		return *this;
@@ -194,7 +199,7 @@ public:
 			ret.initCUDACompution();
 
 			//执行
-			matrixMul<<<height(), 32>>>(deviceMat, m.deviceMat, ret.deviceMat);
+			matrixMul<<<height(), threads>>>(deviceMat, m.deviceMat, ret.deviceMat);
 			errProc(cudaGetLastError(), "fail to execute the kernel function in Matrix::operator*()");
 
 			//读结果
@@ -282,51 +287,87 @@ Matrix multiplication(Matrix &a, Matrix &b)
 	return ret;
 }
 
+int Matrix::threads = 32;
+
 int main(int argc, char **argv)
 {
+	std::vector<size_t> n = { 10,50,100, 200, 300, 400, 500, 1000 };
+	std::vector<int> thd = { 32,64,128,256 };
+	bool enableCheck = false;
+
 	Timer t;
+	std::ofstream res("result.txt");
 
-	Matrix a(50, 50);
-	Matrix b(50, 50);
-	Matrix c_g, c_c;
-
-	a.randomize();
-	b.randomize();
-
-	t.begin();
-	c_g = a*b;
-	t.end();
-	std::cout << "GPU, time:" << t.time() << "ms" << std::endl;
-	t.reset();
-
-	t.begin();
-	c_c = multiplication(a, b);
-	t.end();
-	std::cout << "CPU, time:" << t.time() << "ms" << std::endl;
-
-	std::ofstream outa("a.txt");
-	std::ofstream outb("b.txt");
-	std::ofstream out("err.log");
 	char buffer[200];
-	for (int i = 0; i != c_c.width(); ++i)
+	
+	displayInfo(std::cout);
+
+	sprintf(buffer, "size:n\tcpu\tgpu thd:\t");
+	res << buffer;
+	for (auto i : thd)
 	{
-		for (int j = 0; j != c_c.height(); ++j)
+		res << i << '\t';
+	}
+	res << std::endl;
+
+	for (int i = 0; i != n.size(); ++i)
+	{
+		std::cout << "data size = "<<n[i] << std::endl;
+		res << n[i] << "\t";
+
+		Matrix a(n[i], n[i]);
+		Matrix b(n[i], n[i]);
+		Matrix c_g, c_c;
+
+		a.randomize();
+		b.randomize();
+
+		std::cout << "\tCPU begin" << std::endl;
+		t.begin();
+		c_c = multiplication(a, b);
+		t.end();
+		res << t.time() << "\t";
+		t.reset();
+
+		std::cout << "\tGPU begin" << std::endl;
+		for (int j = 0; j != thd.size(); ++j)
 		{
-			outa << a(i, j) << ' ';
-			outb << b(i, j) << ' ';
-			if (abs(c_c(i, j) - c_g(i, j) > 1e-6))
+			std::cout << "\t\tthd = " << thd[j] << std::endl;
+
+			Matrix::threads = thd[j];
+
+			t.begin();
+			c_g = a*b;
+			t.end();
+			res << t.time() << "\t";
+			t.reset();
+		}
+		res << std::endl;
+		if (enableCheck)
+		{
+			std::ofstream outa("a.txt");
+			std::ofstream outb("b.txt");
+			std::ofstream out("err.log");
+			for (int i = 0; i != c_c.width(); ++i)
 			{
-				sprintf(buffer, "(%d, %d), c_c:%f, c_g:%f\n", i, j, c_c(i, j), c_g(i, j));
-				out << buffer << std::flush;
+				for (int j = 0; j != c_c.height(); ++j)
+				{
+					outa << a(i, j) << ' ';
+					outb << b(i, j) << ' ';
+					if (abs(c_c(i, j) - c_g(i, j) > 1e-6))
+					{
+						sprintf(buffer, "(%d, %d), c_c:%f, c_g:%f\n", i, j, c_c(i, j), c_g(i, j));
+						out << buffer << std::endl;
+					}
+				}
+				outa << std::endl;
+				outb << std::endl;
 			}
 		}
-		outa << std::endl;
-		outb << std::endl;
 	}
 
-	char c;
-	std::cout << "Press Enter to exit." << std::flush;
-	std::cin >> c;
+	//std::cout << "Press Enter to exit." << std::flush;
+	//getchar();
 
 	return 0;
 }
