@@ -96,12 +96,12 @@ public:
 		//delete[] hostData;
 	}
 	//矩阵的宽度，即列数
-	size_t width() const
+	__host__ __device__ size_t width() const
 	{
 		return _width;
 	}
 	//矩阵的高度，即行数
-	size_t height() const
+	__host__ __device__ size_t height() const
 	{
 		return _height;
 	}
@@ -129,17 +129,26 @@ public:
 	//通过一维下标访问数据
 	float &operator[](size_t id) const
 	{
+/*
+#ifdef _DEBUG
 		if (id > size())
 			throw std::exception("id out of range in Matrix::operator[]");
+#endif
+*/
 		return hostData[id];
 	}
 	//通过二维下标访问数据
-	float &operator()(size_t x, size_t y) const
+	__host__ __device__ float &operator()(size_t x, size_t y) const
 	{
+/*
+#ifdef _DEBUG
+
 		if (x > _width)
 			throw std::exception("x out of range in Matrix::operator()");
 		if (y > _height)
 			throw std::exception("y out of range in Matrix::operator()");
+#endif
+*/
 		return hostData[x + y*_width];
 	}
 	//等于运算符重载
@@ -148,7 +157,6 @@ public:
 		_height = m.height();
 		_width = m.width();
 		_size = m.size();
-		threads = m.threads;
 
 		hostData = std::make_unique<float[]>(size());
 		for (size_t i = 0; i != size(); ++i)
@@ -163,7 +171,6 @@ public:
 		_height = m.height();
 		_width = m.width();
 		_size = m.size();
-		threads = m.threads;
 
 		hostData = std::move(m.hostData);
 		return *this;
@@ -172,16 +179,6 @@ public:
 	__device__ float &accDevice(size_t x, size_t y)
 	{
 		return deviceData[x + y * _width];
-	}
-	//矩阵的宽度
-	__device__ size_t widthDevice() const
-	{
-		return _width;
-	}
-	//矩阵的高度
-	__device__ size_t heightDevice() const
-	{
-		return _width;
 	}
 	//矩阵乘法
 	Matrix operator*(Matrix &m)
@@ -198,8 +195,12 @@ public:
 			m.initCUDACompution();
 			ret.initCUDACompution();
 
+			if (Matrix::threads > 256)
+			{
+				throw std::exception("too many threads in one block");
+			}
 			//执行
-			matrixMul<<<height(), threads>>>(deviceMat, m.deviceMat, ret.deviceMat);
+			matrixMul<<<(int)height(), threads>>>(deviceMat, m.deviceMat, ret.deviceMat);
 			errProc(cudaGetLastError(), "fail to execute the kernel function in Matrix::operator*()");
 
 			//读结果
@@ -224,23 +225,23 @@ public:
 };
 //矩阵乘法：C=A*B
 //每个block计算C中的一行
-__global__ void matrixMul(Matrix *a, Matrix *b, Matrix *c)
+__global__ void matrixMul(Matrix *a, Matrix *b, Matrix *c, int start, int end)
 {
+	//__shared__ float res[256];
 	int bid = blockIdx.x;
 	int tid = threadIdx.x;
 	int bdim = blockDim.x;
 	//tid偏移量，每次循环增加thread的个数
 	int i = 0;
-	int w = c->widthDevice();
-	int ha = a->heightDevice();
+	int w = c->width();
+	int ha = a->height();
 	//如果数据量较少则跳过循环
 	if (w < bdim)
 	{
 		goto last;
 	}
-	//展开循环，每次循环计算矩阵c中第bid行的bdim个数
-#pragma unroll
-	for (; i < w; i+=bdim)
+	//每次循环计算矩阵c中第bid行的bdim个数
+	for (; i < w; i += bdim)
 	{
 		//结果临时变量
 		float temp = 0;
@@ -254,7 +255,7 @@ __global__ void matrixMul(Matrix *a, Matrix *b, Matrix *c)
 	}
 last:
 	int k = i + tid;
-	//由于矩阵大小可能不为256的整数倍，对剩余部分进行计算
+	//由于矩阵大小可能不为thread数的整数倍，对剩余部分进行计算
 	if (k < w)
 	{
 		float temp = 0;
@@ -291,8 +292,10 @@ int Matrix::threads = 32;
 
 int main(int argc, char **argv)
 {
-	std::vector<size_t> n = { 10,50,100, 200, 300, 400, 500, 1000 };
+	std::vector<int> n = { /*10,50,100, 200, 300, 400, 500,*/ 1000 };
 	std::vector<int> thd = { 32,64,128,256 };
+	bool enableCPUTest = false;
+	bool enableGPUTest = true;
 	bool enableCheck = false;
 
 	Timer t;
@@ -302,7 +305,10 @@ int main(int argc, char **argv)
 	
 	displayInfo(std::cout);
 
-	sprintf(buffer, "size:n\tcpu\tgpu thd:\t");
+	res << "Data size";
+	if (enableCPUTest)
+		res << "CPU\t";
+
 	res << buffer;
 	for (auto i : thd)
 	{
@@ -312,7 +318,7 @@ int main(int argc, char **argv)
 
 	for (int i = 0; i != n.size(); ++i)
 	{
-		std::cout << "data size = "<<n[i] << std::endl;
+		std::cout << "data size = "<< n[i] << std::endl;
 		res << n[i] << "\t";
 
 		Matrix a(n[i], n[i]);
@@ -321,43 +327,56 @@ int main(int argc, char **argv)
 
 		a.randomize();
 		b.randomize();
-
-		std::cout << "\tCPU begin" << std::endl;
-		t.begin();
-		c_c = multiplication(a, b);
-		t.end();
-		res << t.time() << "\t";
-		t.reset();
-
-		std::cout << "\tGPU begin" << std::endl;
-		for (int j = 0; j != thd.size(); ++j)
+		//CPU 测试部分
+		if (enableCPUTest)
 		{
-			std::cout << "\t\tthd = " << thd[j] << std::endl;
-
-			Matrix::threads = thd[j];
-
+			std::cout << "\tCPU begin" << std::endl;
 			t.begin();
-			c_g = a*b;
+			c_c = multiplication(a, b);
 			t.end();
 			res << t.time() << "\t";
 			t.reset();
 		}
-		res << std::endl;
+		//GPU测试部分
+		if (enableGPUTest)
+		{
+			std::cout << "\tGPU begin" << std::endl;
+			for (int j = 0; j != thd.size(); ++j)
+			{
+				std::cout << "\t\tthd = " << thd[j] << std::endl;
+
+				Matrix::threads = thd[j];
+
+				t.begin();
+				c_g = a*b;
+				t.end();
+				res << t.time() << "\t";
+				t.reset();
+			}
+			res << std::endl;
+		}
+		//数据校验
 		if (enableCheck)
 		{
-			std::ofstream outa("a.txt");
-			std::ofstream outb("b.txt");
-			std::ofstream out("err.log");
+			sprintf(buffer, "%d_a.txt", n[i]);
+			std::ofstream outa(buffer);
+			sprintf(buffer, "%d_b.txt", n[i]);
+			std::ofstream outb(buffer);
+			sprintf(buffer, "%d_err_log.txt", n[i]);
+			std::ofstream errlog(buffer);
+			//误差阈值
+			float threshold = (float)1e-7;
+
 			for (int i = 0; i != c_c.width(); ++i)
 			{
 				for (int j = 0; j != c_c.height(); ++j)
 				{
 					outa << a(i, j) << ' ';
 					outb << b(i, j) << ' ';
-					if (abs(c_c(i, j) - c_g(i, j) > 1e-6))
+					if (abs(c_c(i, j) - c_g(i, j) > threshold))
 					{
 						sprintf(buffer, "(%d, %d), c_c:%f, c_g:%f\n", i, j, c_c(i, j), c_g(i, j));
-						out << buffer << std::endl;
+						errlog << buffer << std::endl;
 					}
 				}
 				outa << std::endl;
@@ -366,8 +385,8 @@ int main(int argc, char **argv)
 		}
 	}
 
-	//std::cout << "Press Enter to exit." << std::flush;
-	//getchar();
+	std::cout << "Press Enter to exit." << std::flush;
+	getchar();
 
 	return 0;
 }
